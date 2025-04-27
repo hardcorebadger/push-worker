@@ -2,7 +2,9 @@ import os
 import json
 import time
 import redis
+import traceback
 from dotenv import load_dotenv
+from app.push import send_ios_push, send_android_push, send_web_push
 
 load_dotenv()
 
@@ -11,6 +13,12 @@ redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 print(f"Connecting to Redis at: {redis_url}")
 redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
 
+def get_device_info(device_id):
+    """Get device info from Redis"""
+    device_key = f"device:{device_id}"
+    device_info = redis_client.hgetall(device_key)
+    return device_info
+
 def process_push_notification(task_data):
     """Process a push notification task"""
     try:
@@ -18,16 +26,53 @@ def process_push_notification(task_data):
         print("\n=== Processing Push Notification ===")
         print(f"Message ID: {task_data.get('message_id')}")
         print(f"Device ID: {task_data.get('device_id')}")
-        print(f"Platform: {task_data.get('platform')}")
         print(f"Title: {task_data.get('title')}")
         print(f"Body: {task_data.get('body')}")
         print(f"Category: {task_data.get('category')}")
         print("===================================\n")
         
-        return {'status': 'success', 'task': task_data}
+        # Get device info from Redis
+        device_info = get_device_info(task_data.get('device_id'))
+        if not device_info:
+            return {'status': 'error', 'error': f'Device not found: {task_data.get("device_id")}'}
+            
+        token = device_info.get('token')
+        platform = device_info.get('platform')
+        
+        # Send push based on platform
+        if platform == 'ios':
+            result = send_ios_push(
+                device_token=token,
+                title=task_data.get('title'),
+                body=task_data.get('body'),
+                category=task_data.get('category')
+            )
+        elif platform == 'android':
+            result = send_android_push(
+                device_token=token,
+                title=task_data.get('title'),
+                body=task_data.get('body'),
+                category=task_data.get('category')
+            )
+        elif platform == 'web':
+            result = send_web_push(
+                subscription_info=json.loads(token),
+                title=task_data.get('title'),
+                body=task_data.get('body'),
+                category=task_data.get('category'),
+                vapid_private_key=task_data.get('vapid_private_key'),
+                vapid_subject=task_data.get('vapid_subject')
+            )
+        else:
+            result = {'status': 'error', 'error': f'Unknown platform: {platform}'}
+        
+        print(f"Push result: {result}")
+        return result
         
     except Exception as e:
         print(f"Error processing push: {str(e)}")
+        print("\nStack trace:")
+        traceback.print_exc()
         return {'status': 'error', 'error': str(e)}
 
 def main():
@@ -44,6 +89,8 @@ def main():
                 time.sleep(1)
         except Exception as e:
             print(f"Error in main loop: {str(e)}")
+            print("\nStack trace:")
+            traceback.print_exc()
             time.sleep(1)
 
 if __name__ == '__main__':
