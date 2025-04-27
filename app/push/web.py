@@ -1,8 +1,24 @@
 from pywebpush import webpush, WebPushException
 import os
 import json
+from sqlalchemy import delete
+from dotenv import load_dotenv
+from app.db.models import Device, Base
+from app.database import engine
 
-def send_web_push(subscription_info, title, body, category=None, vapid_private_key=None, vapid_subject=None):
+# Device deletion function
+def delete_device(device_id, user_id, project_id):
+    with engine.connect() as conn:
+        conn.execute(
+            delete(Device).where(
+                (Device.device_id == device_id) &
+                (Device.user_id == user_id) &
+                (Device.project_id == project_id)
+            )
+        )
+        conn.commit()
+
+def send_web_push(subscription_info, title, body, category=None, icon=None, action_url=None, vapid_private_key=None, vapid_subject=None, device_id=None, user_id=None, project_id=None):
     """
     Send a push notification to a web browser using Web Push API.
     
@@ -11,6 +27,13 @@ def send_web_push(subscription_info, title, body, category=None, vapid_private_k
         title (str): Notification title
         body (str): Notification body
         category (str, optional): Notification category
+        icon (str, optional): URL for the notification icon
+        action_url (str, optional): URL to open when notification is clicked
+        vapid_private_key (str, optional): VAPID private key
+        vapid_subject (str, optional): VAPID subject (mailto or URL)
+        device_id (str, optional): Device ID
+        user_id (str, optional): User ID
+        project_id (str, optional): Project ID
     """
     try:
         
@@ -18,27 +41,20 @@ def send_web_push(subscription_info, title, body, category=None, vapid_private_k
         payload = {
             'title': title,
             'body': body,
-            'category': category
+            'category': category,
+            'icon': icon,
+            'action_url': action_url
         }
         
         # Convert payload to JSON string
         payload_json = json.dumps(payload)
-        
-        # Get the endpoint from subscription info
-        # endpoint = subscription_info.get('endpoint', '')
         
         # VAPID claims - use the endpoint's origin as the audience
         vapid_claims = {
             "sub": vapid_subject,  # TODO: Get from project settings
         }
         
-        # print(f"Using VAPID claims: {vapid_claims}")
-
-        print(f"subscription_info: {subscription_info}")
-        print(f"payload_json: {payload_json}")
-        print(f"vapid_private_key: {vapid_private_key}")
-        print(f"vapid_claims: {vapid_claims}")
-        
+   
         # Send notification
         response = webpush(
             subscription_info=subscription_info,
@@ -47,11 +63,17 @@ def send_web_push(subscription_info, title, body, category=None, vapid_private_k
             vapid_claims=vapid_claims,
             content_encoding='aes128gcm'
         )
-
-        print(f"Web push response: {response}")
         
         return {'status': 'success', 'platform': 'web', 'response': response.status_code}
         
     except WebPushException as e:
         print(f"Error sending web push: {str(e)}")
+        print(e.response.status_code)
+        
+        if e.response.status_code == 410:
+            try:
+                delete_device(device_id, user_id, project_id)
+            except Exception as e:
+                print(f"Error deleting device: device_id: {device_id}, user_id: {user_id}, project_id: {project_id}")
+
         return {'status': 'error', 'platform': 'web', 'error': str(e)} 

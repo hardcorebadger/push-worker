@@ -60,8 +60,13 @@ def process_push_notification(task_data):
                 title=task_data.get('title'),
                 body=task_data.get('body'),
                 category=task_data.get('category'),
+                icon=task_data.get('icon'),
+                action_url=task_data.get('action_url'),
                 vapid_private_key=task_data.get('vapid_private_key'),
-                vapid_subject=task_data.get('vapid_subject')
+                vapid_subject=task_data.get('vapid_subject'),
+                device_id=task_data.get('device_id'),
+                user_id=task_data.get('user_id'),
+                project_id=task_data.get('project_id')
             )
         else:
             result = {'status': 'error', 'error': f'Unknown platform: {platform}'}
