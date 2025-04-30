@@ -7,18 +7,16 @@ from app.db.models import Device, Base
 from app.database import engine
 
 # Device deletion function
-def delete_device(device_id, user_id, project_id):
+def delete_device(device_id):
     with engine.connect() as conn:
         conn.execute(
             delete(Device).where(
-                (Device.device_id == device_id) &
-                (Device.user_id == user_id) &
-                (Device.project_id == project_id)
+                Device.device_id == device_id
             )
         )
         conn.commit()
 
-def send_web_push(subscription_info, title, body, category=None, icon=None, action_url=None, vapid_private_key=None, vapid_subject=None, device_id=None, user_id=None, project_id=None):
+def send_web_push(subscription_info, title, body, icon=None, action_url=None, vapid_private_key=None, vapid_subject=None, device_id=None):
     """
     Send a push notification to a web browser using Web Push API.
     
@@ -41,7 +39,6 @@ def send_web_push(subscription_info, title, body, category=None, icon=None, acti
         payload = {
             'title': title,
             'body': body,
-            'category': category,
             'icon': icon,
             'action_url': action_url
         }
@@ -70,9 +67,9 @@ def send_web_push(subscription_info, title, body, category=None, icon=None, acti
         print(f"Error sending web push: {str(e)}")
         print(e.response.status_code)
         
-        if e.response.status_code == 410:
+        if e.response.status_code == 410 or e.response.status_code == 404:
             try:
-                delete_device(device_id, user_id, project_id)
+                delete_device(device_id)
             except Exception as e:
                 print(f"Error deleting device: device_id: {device_id}, user_id: {user_id}, project_id: {project_id}")
 
